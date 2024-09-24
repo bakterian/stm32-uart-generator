@@ -58,22 +58,85 @@ async fn main(spawner: Spawner) {
 
 #[embassy_executor::task]
 async fn sine_generator(seed: u16) {
-    todo!();
+    let mut rnd = fastrand::Rng::with_seed(seed.into());
+    let mut current = 0.0;
+    loop {
+        let noise = (rnd.f32() - 0.5) * 0.2;
+        SIGNAL_CHANNEL
+            .send(SignalType::Sine(libm::sinf(current) + noise))
+            .await;
+        embassy_time::Timer::after(Duration::from_millis(150)).await;
+        current += 0.01;
+    }
 }
 
 #[embassy_executor::task]
 async fn square_generator(seed: u16) {
-    todo!();
+    let mut rnd = fastrand::Rng::with_seed(seed.into());
+    let mut current = Wrapping(0);
+    loop {
+        let noise = (rnd.f32() - 0.5) * 0.2;
+        if (current.0 / 50) % 2 == 0 {
+            SIGNAL_CHANNEL.send(SignalType::Square(1.0 + noise)).await;
+        } else {
+            SIGNAL_CHANNEL.send(SignalType::Square(0.0 + noise)).await;
+        }
+        embassy_time::Timer::after(Duration::from_millis(50)).await;
+        current += 1;
+    }
+}
+
+struct Filter {
+    value: f32,
+}
+
+impl Filter {
+    fn new() -> Self {
+        Self { value: 0.0 }
+    }
+
+    pub fn filter(&mut self, value: f32) -> f32 {
+        let alpha = 0.7;
+        self.value = self.value * alpha + (1.0 - alpha) * value;
+
+        self.value
+    }
 }
 
 #[embassy_executor::task]
 async fn filter_data() {
-    todo!();
+    let mut sine_filter = Filter::new();
+    let mut square_filter = Filter::new();
+    loop {
+        match SIGNAL_CHANNEL.receive().await {
+            SignalType::Sine(v) => {
+                PUBLISH_CHANNEL
+                    .send(PublishSignalType::Sine(v, sine_filter.filter(v)))
+                    .await
+            }
+            SignalType::Square(v) => {
+                PUBLISH_CHANNEL
+                    .send(PublishSignalType::Square(v, square_filter.filter(v)))
+                    .await
+            }
+        };
+    }
 }
 
 #[embassy_executor::task]
-async fn send_to_pc(
-    mut uart: Uart<'static, peripherals::USART3, peripherals::DMA1_CH3, peripherals::DMA1_CH1>,
-) {
-    todo!();
+async fn send_to_pc(mut uart: Uart<'static, peripherals::USART3, peripherals::DMA1_CH3, peripherals::DMA1_CH1>) {
+    loop {
+        let d = PUBLISH_CHANNEL.receive().await;
+        let mut buf = String::<64>::new();
+        match d {
+            PublishSignalType::Sine(raw, filtered) => {
+                core::write!(&mut buf, "SINE,{},{}\r\n", raw, filtered).unwrap();
+                uart.write(buf.as_bytes()).await.unwrap();
+            }
+            PublishSignalType::Square(raw, filtered) => {
+                core::write!(&mut buf, "SQUARE,{},{}\r\n", raw, filtered).unwrap();
+                uart.write(buf.as_bytes()).await.unwrap();
+            }
+        };
+    }
 }
