@@ -1,7 +1,6 @@
 [target.'cfg(all(target_arch = "arm", target_os = "none"))']
 runner = "probe-rs run --chip STM32F103RB"
 #runner = "probe-run --chip STM32F103RB"
-#runner = "probe-rs run --chip STM32F446RETx"
 
 
 rustflags = [
@@ -24,7 +23,6 @@ rustflags = [
 
 [build]
 target = "thumbv7m-none-eabi" #own STM32 board
-#target = "thumbv7em-none-eabihf" #borrowed STM32 board
 
 [env]
 DEFMT_LOG = "trace"
