@@ -1,8 +1,7 @@
 [target.'cfg(all(target_arch = "arm", target_os = "none"))']
-runner = "probe-rs run --chip STM32F103RB"
-#runner = "probe-run --chip STM32F103RB"
-#runner = "probe-rs run --chip STM32F446RETx"
+runner = "gdb-multiarch -q -x openocd.gdb"
 
+# TODO start "openocd" in a seperate console prior to "cargo run"
 
 rustflags = [
     # LLD (shipped with the Rust toolchain) is used as the default linker
@@ -24,7 +23,6 @@ rustflags = [
 
 [build]
 target = "thumbv7m-none-eabi" #own STM32 board
-#target = "thumbv7em-none-eabihf" #borrowed STM32 board
 
 [env]
 DEFMT_LOG = "trace"
