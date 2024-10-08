@@ -3,6 +3,7 @@
 
 use defmt::{info, unwrap};
 use embassy_executor::Spawner;
+use embassy_stm32::dma::NoDma;
 use embassy_stm32::usart::{Config, Uart};
 use embassy_stm32::{bind_interrupts, peripherals, usart};
 use embassy_sync::blocking_mutex::raw::ThreadModeRawMutex;
@@ -23,18 +24,20 @@ bind_interrupts!(struct Irqs {
 async fn main(spawner: Spawner) {
     let p = embassy_stm32::init(Default::default());
 
-    info!("Prog start!");
+    info!("PROG START");
 
     let config = Config::default();
-    let usart = Uart::new(
-        p.USART3, p.PC11, p.PC10, Irqs, p.DMA1_CH3, p.DMA1_CH1, config,
-    )
-    .unwrap();
+   //  let usart = Uart::new(
+   //      p.USART3, p.PC11, p.PC10, Irqs, p.DMA1_CH3, p.DMA1_CH1, config,
+   //  )
+    let mut usart = Uart::new(p.USART3, p.PC11, p.PC10, Irqs, NoDma, NoDma, config).unwrap();
 
     let button = Input::new(p.PC13, Pull::Up);
     let button = ExtiInput::new(button, p.EXTI13);
 
-    let led = Output::new(p.PA5, Level::High, Speed::Low);
+    let led = Output::new(p.PA5, Level::Low, Speed::Low);
+
+    unwrap!(usart.blocking_write(b"Hello from Embassy World!\r\n"));
 
     unwrap!(spawner.spawn(check_user_button(button)));
     unwrap!(spawner.spawn(send_to_pc(usart, led)));
@@ -57,7 +60,7 @@ async fn check_user_button(mut button: ExtiInput<'static, peripherals::PC13>) {
 }
 
 #[embassy_executor::task]
-async fn send_to_pc(mut uart: Uart<'static, peripherals::USART3, peripherals::DMA1_CH3, peripherals::DMA1_CH1>,
+async fn send_to_pc(mut usart: Uart<'static, peripherals::USART3>,
                     mut led: Output<'static, peripherals::PA5>) {
     loop
      {
@@ -65,12 +68,13 @@ async fn send_to_pc(mut uart: Uart<'static, peripherals::USART3, peripherals::DM
         let str_to_publish = PUBLISH_CHANNEL.receive().await;
 
         // 1. Send-out the provided string data
-        uart.write(str_to_publish.as_bytes()).await.unwrap();
+        unwrap!(usart.blocking_write(&str_to_publish.as_bytes()));
+        info!("USART TX");
 
-        // 2. blink wiht the LED
+        // 2. blink quickly with the LED
         led.set_high();
-        embassy_time::Timer::after(Duration::from_secs(1)).await;
+        embassy_time::Timer::after(Duration::from_millis(100)).await;
         led.set_low();
-        embassy_time::Timer::after(Duration::from_secs(1)).await;
-    }
+        embassy_time::Timer::after(Duration::from_millis(100)).await;
+     }
 }

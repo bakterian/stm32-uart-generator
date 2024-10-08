@@ -61,15 +61,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "baf1de4339761588bc0619e3cbc0120ee582ebb74b53b4efbf79117bd2da40fd"
 
 [[package]]
-name = "chrono"
-version = "0.4.31"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7f2c685bad3eb3d45a01354cedb7d5faa66194d1d58ba6e267a8de788f79db38"
-dependencies = [
- "num-traits",
-]
-
-[[package]]
 name = "cortex-m"
 version = "0.7.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -275,7 +266,6 @@ dependencies = [
  "bit_field",
  "bxcan",
  "cfg-if",
- "chrono",
  "cortex-m",
  "cortex-m-rt",
  "critical-section",
@@ -330,6 +320,7 @@ checksum = "b3e0c49ff02ebe324faf3a8653ba91582e2d0a7fdef5bc88f449d5aa1bfcc05c"
 dependencies = [
  "cfg-if",
  "critical-section",
+ "defmt",
  "embedded-io-async",
  "futures-util",
  "heapless",
