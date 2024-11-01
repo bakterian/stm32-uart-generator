@@ -1,10 +1,10 @@
 MEMORY
 {
   /* NOTE 1 K = 1 KiBi = 1024 bytes */
-  /* Settings are in line with the STM32F103RB spec */
+  /* Settings are in line with the STM32F411 spec */
 
-  FLASH : ORIGIN = 0x08000000, LENGTH = 128K
-  RAM : ORIGIN = 0x20000000, LENGTH = 20K
+  FLASH : ORIGIN = 0x08000000, LENGTH = 512K
+  RAM : ORIGIN = 0x20000000, LENGTH = 128K
 }
 
 /* This is where the call stack will be allocated. */

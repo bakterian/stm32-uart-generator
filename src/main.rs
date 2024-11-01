@@ -16,8 +16,10 @@ use embassy_stm32::exti::ExtiInput;
 
 static PUBLISH_CHANNEL: Channel<ThreadModeRawMutex,String<64>, 4> = Channel::new();
 
+const BLINK_DURATION_MS: u64 = 400;
+
 bind_interrupts!(struct Irqs {
-    USART3 => usart::InterruptHandler<peripherals::USART3>;
+    USART2 => usart::InterruptHandler<peripherals::USART2>;
 });
 
 #[embassy_executor::main]
@@ -30,27 +32,35 @@ async fn main(spawner: Spawner) {
    //  let usart = Uart::new(
    //      p.USART3, p.PC11, p.PC10, Irqs, p.DMA1_CH3, p.DMA1_CH1, config,
    //  )
-    let mut usart = Uart::new(p.USART3, p.PC11, p.PC10, Irqs, NoDma, NoDma, config).unwrap();
+    let mut usart = Uart::new(p.USART2, p.PA3, p.PA2, Irqs, NoDma, NoDma, config).unwrap();
 
-    let button = Input::new(p.PC13, Pull::Up);
-    let button = ExtiInput::new(button, p.EXTI13);
+    let button = Input::new(p.PA0, Pull::Down);
+    let button = ExtiInput::new(button, p.EXTI0);
 
-    let led = Output::new(p.PA5, Level::Low, Speed::Low);
+    let mut green_led = Output::new(p.PD12, Level::Low, Speed::Low);
+    let orange_led = Output::new(p.PD13, Level::Low, Speed::Low);
+    let blue_led = Output::new(p.PD15, Level::Low, Speed::Low);
+
+    green_led.set_high();
+    embassy_time::Timer::after(Duration::from_millis(BLINK_DURATION_MS)).await;
+    green_led.set_low();
+    embassy_time::Timer::after(Duration::from_millis(BLINK_DURATION_MS)).await;
+
 
     unwrap!(usart.blocking_write(b"Hello from Embassy World!\r\n"));
 
     unwrap!(spawner.spawn(check_user_button(button)));
-    unwrap!(spawner.spawn(send_to_pc(usart, led)));
+    unwrap!(spawner.spawn(send_to_pc(usart, orange_led, blue_led)));
 }
 
 #[embassy_executor::task]
-async fn check_user_button(mut button: ExtiInput<'static, peripherals::PC13>) {
+async fn check_user_button(mut button: ExtiInput<'static, peripherals::PA0>) {
     loop {
             //0. waiting for someone to press the user button and cause a falling voltage edge
             button.wait_for_falling_edge().await;
 
             //1. place some smart the to the buffer
-            let buf = String::<64>::try_from("User Button press identfied")
+            let buf = String::<64>::try_from("User Button press identfied\r\n")
                .expect("problem creating heapless string from slice");
 
             //2. added the information to our publish queue
@@ -60,8 +70,10 @@ async fn check_user_button(mut button: ExtiInput<'static, peripherals::PC13>) {
 }
 
 #[embassy_executor::task]
-async fn send_to_pc(mut usart: Uart<'static, peripherals::USART3>,
-                    mut led: Output<'static, peripherals::PA5>) {
+async fn send_to_pc(mut usart: Uart<'static, peripherals::USART2>,
+                    mut orange_led: Output<'static, peripherals::PD13>,
+                    mut blue_led: Output<'static, peripherals::PD15>) {
+    
     loop
      {
         // 0. waiting for new items in the publish queue
@@ -71,10 +83,15 @@ async fn send_to_pc(mut usart: Uart<'static, peripherals::USART3>,
         unwrap!(usart.blocking_write(&str_to_publish.as_bytes()));
         info!("USART TX");
 
-        // 2. blink quickly with the LED
-        led.set_high();
-        embassy_time::Timer::after(Duration::from_millis(100)).await;
-        led.set_low();
-        embassy_time::Timer::after(Duration::from_millis(100)).await;
+        // 2. blink quickly with the LEDs
+        orange_led.set_high();
+        embassy_time::Timer::after(Duration::from_millis(BLINK_DURATION_MS)).await;
+        orange_led.set_low();
+        embassy_time::Timer::after(Duration::from_millis(BLINK_DURATION_MS)).await;
+
+        blue_led.set_high();
+        embassy_time::Timer::after(Duration::from_millis(BLINK_DURATION_MS)).await;
+        blue_led.set_low();
+        embassy_time::Timer::after(Duration::from_millis(BLINK_DURATION_MS)).await;
      }
 }

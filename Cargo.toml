@@ -5,6 +5,9 @@ edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
+# !!! When working with embassy always rember to choose the correct embassy-stm32 nucleo board version
+# specifiy it as feature in case of the STM32F4 Disoveryboard - "stm32f411ve" !!!
+
 [dependencies]
 embassy-executor = { version = "0.6.0", features = [
 #    "task-arena-size-32768",
@@ -16,7 +19,7 @@ embassy-executor = { version = "0.6.0", features = [
 ] }
 embassy-stm32 = { version = "0.1.0", features = [
     "defmt",
-    "stm32f103rb",
+    "stm32f411ve",
     "memory-x",
     "time-driver-any",
     "exti",
