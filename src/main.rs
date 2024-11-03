@@ -4,6 +4,7 @@
 use core::fmt::Write;
 use core::str;
 use heapless::HistoryBuffer;
+use core::sync::atomic::{AtomicU32, Ordering};
 
 use defmt::{info, unwrap};
 use embassy_executor::Spawner;
@@ -22,6 +23,10 @@ use libm::sinf;
 
 static SIGNAL_CHANNEL: Channel<ThreadModeRawMutex, SignalType, 4> = Channel::new();
 static PUBLISH_CHANNEL: Channel<ThreadModeRawMutex, PublishSignalType, 4> = Channel::new();
+const NOISE_MAX: u32 = 1000000;
+const NOISE_MIN: u32 = 1;
+static NOISE_LEVEL: AtomicU32 = AtomicU32::new(NOISE_MIN);
+
 
 bind_interrupts!(struct Irqs {
     USART2 => usart::InterruptHandler<peripherals::USART2>;
@@ -37,6 +42,34 @@ enum PublishSignalType {
     Square(f32, f32),
 }
 
+fn increase_noise()
+{
+   let mut curr_noise_lvl = NOISE_LEVEL.load(Ordering::Relaxed);
+
+   if curr_noise_lvl < NOISE_MAX
+   {
+      curr_noise_lvl = curr_noise_lvl * 10;
+      NOISE_LEVEL.store(curr_noise_lvl, Ordering::Relaxed);
+      info!("Increased noise level to: {}", curr_noise_lvl);
+   }
+}
+
+fn decrease_noise()
+{
+   let mut curr_noise_lvl = NOISE_LEVEL.load(Ordering::Relaxed);
+
+   if curr_noise_lvl > NOISE_MIN
+   {
+      curr_noise_lvl = curr_noise_lvl / 10;
+      NOISE_LEVEL.store(curr_noise_lvl, Ordering::Relaxed);
+      info!("Decreased noise level to: {}", curr_noise_lvl);
+   }
+}
+
+fn get_noise_level() -> f32
+{
+   (NOISE_LEVEL.load(Ordering::Relaxed) as f32) * 0.001_f32
+}
 
 #[embassy_executor::main]
 async fn main(spawner: Spawner) {
@@ -56,7 +89,6 @@ async fn main(spawner: Spawner) {
 
     let seed = adc.read(&mut pin);
     unwrap!(spawner.spawn(sine_generator(seed)));
-    let seed = adc.read(&mut pin);
     unwrap!(spawner.spawn(square_generator(seed)));
     unwrap!(spawner.spawn(filter_data()));
     unwrap!(spawner.spawn(send_to_pc(usart)));
@@ -64,11 +96,11 @@ async fn main(spawner: Spawner) {
 
 #[embassy_executor::task]
 async fn sine_generator(seed: u16) {
-   let mut rnd = fastrand::Rng::with_seed(seed.into());
+   let mut rnd: fastrand::Rng = fastrand::Rng::with_seed(seed.into());
    let mut degree = 0.0;
    loop
    {
-      let noise = rnd.f32();
+      let noise = rnd.f32() * get_noise_level();
       let sin_val = sinf(degree + noise);
 
       SIGNAL_CHANNEL.send(SignalType::Sine(sin_val)).await;
@@ -90,7 +122,7 @@ async fn square_generator(seed: u16) {
 
    loop
    {
-      let noise = rnd.f32();
+      let noise = rnd.f32() * get_noise_level();
 
       let square_val:f32;
 
@@ -189,8 +221,14 @@ async fn send_to_pc(mut uart: Uart<'static, peripherals::USART2, peripherals::DM
                   {
                      Ok(v) => 
                      {
-                        info!("Just received some UART data: {}",v)
-                        //TODO parse and adjust noise
+                        info!("Just received some UART data: {}", v);
+
+                        match v
+                        {
+                           "+" => increase_noise(),
+                           "-" => decrease_noise(),
+                           _ => info!("unsupported characters received"),
+                        }                     
                      },
                      Err(_) => info!("received Invalid UTF-8 sequence via UART"),
                   };
