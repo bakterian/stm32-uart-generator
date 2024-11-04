@@ -23,6 +23,7 @@ use libm::sinf;
 
 static SIGNAL_CHANNEL: Channel<ThreadModeRawMutex, SignalType, 4> = Channel::new();
 static PUBLISH_CHANNEL: Channel<ThreadModeRawMutex, PublishSignalType, 4> = Channel::new();
+const SIG_GEN_DELAY: u64 = 200;
 const NOISE_MAX: u32 = 1000000;
 const NOISE_MIN: u32 = 1;
 static NOISE_LEVEL: AtomicU32 = AtomicU32::new(NOISE_MIN);
@@ -68,7 +69,7 @@ fn decrease_noise()
 
 fn get_noise_level() -> f32
 {
-   (NOISE_LEVEL.load(Ordering::Relaxed) as f32) * 0.001_f32
+   (NOISE_LEVEL.load(Ordering::Relaxed) as f32) * 0.0000001_f32
 }
 
 #[embassy_executor::main]
@@ -101,10 +102,11 @@ async fn sine_generator(seed: u16) {
    loop
    {
       let noise = rnd.f32() * get_noise_level();
+
       let sin_val = sinf(degree + noise);
 
       SIGNAL_CHANNEL.send(SignalType::Sine(sin_val)).await;
-      embassy_time::Timer::after(Duration::from_millis(200)).await;
+      embassy_time::Timer::after(Duration::from_millis(SIG_GEN_DELAY)).await;
 
       degree = degree + 0.0872665; //increment by 5 degrees
    }
@@ -118,7 +120,7 @@ async fn square_generator(seed: u16) {
    let square_high: f32 = 20.0f32;
    let square_low: f32 = -20.0f32;
 
-   embassy_time::Timer::after(Duration::from_millis(200)).await;
+   embassy_time::Timer::after(Duration::from_millis(SIG_GEN_DELAY)).await;
 
    loop
    {
@@ -135,7 +137,7 @@ async fn square_generator(seed: u16) {
 
       SIGNAL_CHANNEL.send(SignalType::Square(square_val)).await;
 
-      embassy_time::Timer::after(Duration::from_millis(200)).await;
+      embassy_time::Timer::after(Duration::from_millis(SIG_GEN_DELAY)).await;
 
       counter = counter +1;
 
@@ -148,7 +150,7 @@ async fn square_generator(seed: u16) {
 #[embassy_executor::task]
 async fn filter_data() {
 
-   let mut sine_hist_buf = HistoryBuffer::<f32, 8>::new();
+   let mut sine_hist_buf = HistoryBuffer::<f32, 4>::new();
 
    let mut square_hist_buf = HistoryBuffer::<f32, 4>::new();
 
@@ -181,11 +183,10 @@ async fn filter_data() {
 async fn send_to_pc(mut uart: Uart<'static, peripherals::USART2, peripherals::DMA1_CH6, peripherals::DMA1_CH5>)
 {
    let mut output_buf:String<80> = String::new();
-   let mut in_buf = [0u8;20];
+   let mut in_buf = [0u8;1];
 
    core::write!(&mut output_buf, "SIG;DIRTY;CLEAN\r\n").unwrap();
    uart.write(output_buf.as_bytes()).await.expect("problem with UART TX");
-   //uart.blocking_write(output_buf.as_bytes()).expect("problem with UART TX");
 
    loop
    {
@@ -209,7 +210,6 @@ async fn send_to_pc(mut uart: Uart<'static, peripherals::USART2, peripherals::DM
             };
       
             uart.write(output_buf.as_bytes()).await.expect("problem with UART TX");
-            //uart.blocking_write(output_buf.as_bytes()).expect("problem with UART TX");
          },
 
          Either::Second(res) => {
@@ -233,11 +233,8 @@ async fn send_to_pc(mut uart: Uart<'static, peripherals::USART2, peripherals::DM
                      Err(_) => info!("received Invalid UTF-8 sequence via UART"),
                   };
                }
-               Err(_) => info!("error during UART read"),
+               Err(e) => info!("error during UART read: {}", e),
            }
-
-           in_buf = [0u8;20]; // resetting input buffer
-              
          },      
       }
 
